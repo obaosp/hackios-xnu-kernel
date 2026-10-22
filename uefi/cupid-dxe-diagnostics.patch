@@ -1,15 +1,16 @@
 diff --git a/MdeModulePkg/Core/Dxe/DxeMain/DxeMain.c b/MdeModulePkg/Core/Dxe/DxeMain/DxeMain.c
 --- a/MdeModulePkg/Core/Dxe/DxeMain/DxeMain.c
 +++ b/MdeModulePkg/Core/Dxe/DxeMain/DxeMain.c
-@@ -7,6 +7,7 @@
+@@ -7,6 +7,8 @@
  **/
  
  #include "DxeMain.h"
 +#include "CupidDiagnostics.h"
++#include "CupidDispatchDiagnostics.h"
  
  //
  // DXE Core Global Variables for Protocols from PEI
-@@ -246,6 +247,8 @@
+@@ -246,6 +248,8 @@
    EFI_VECTOR_HANDOFF_INFO       *VectorInfo;
    VOID                          *EntryPoint;
  
@@ -18,7 +19,7 @@ diff --git a/MdeModulePkg/Core/Dxe/DxeMain/DxeMain.c b/MdeModulePkg/Core/Dxe/Dxe
    //
    // Setup the default exception handlers
    //
-@@ -269,10 +272,14 @@
+@@ -269,10 +273,14 @@
    //
    InitializeDebugAgent (DEBUG_AGENT_INIT_DXE_CORE, HobStart, NULL);
  
@@ -33,7 +34,7 @@ diff --git a/MdeModulePkg/Core/Dxe/DxeMain/DxeMain.c b/MdeModulePkg/Core/Dxe/Dxe
  
    MemoryProfileInit (HobStart);
  
-@@ -318,6 +325,7 @@
+@@ -318,6 +326,7 @@
    // Call constructor for all libraries
    //
    ProcessLibraryConstructorList (gDxeCoreImageHandle, gDxeCoreST);
@@ -41,11 +42,13 @@ diff --git a/MdeModulePkg/Core/Dxe/DxeMain/DxeMain.c b/MdeModulePkg/Core/Dxe/Dxe
    PERF_CROSSMODULE_END ("PEI");
    PERF_CROSSMODULE_BEGIN ("DXE");
  
-@@ -547,6 +555,7 @@
+@@ -547,6 +556,9 @@
    //
    // Invoke the DXE Dispatcher
    //
 +  CupidEarlyStage (12);
++  CupidEarlyStage (13);
++  CupidTraceDriver (0, NULL, "BEFORE DISPATCH", 0);
    CoreDispatcher ();
  
    //

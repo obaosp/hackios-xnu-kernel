@@ -182,3 +182,18 @@ without a later RETURN implicates that driver's initialization or a callback
 it invokes. A trace at LOAD points to image loading or its callbacks. Vendor
 drivers may disable scanout, so disappearance of text needs further probes.
 The trace uses no delay or timer dependency and has no automatic restart.
+
+v005 stayed gold for 40 seconds without trace text. Independent decompression
+confirmed the trace-enabled DXE core is present in the packed FD. v006 adds
+stage 13 (pink, after the gold checkpoint returns) and stage 14 (azure, at
+dispatcher entry before reading dispatcher globals), and prints a trace before
+calling the dispatcher. Stopping variants isolate these paths with timed resets.
+Use `--stages 13 14` with the stage packer for v006. A selected stage waits
+eight seconds before resetting; the baseline continues without a timed reset.
+
+Verify embedded core identity separately from boot packing:
+
+```sh
+python3 tools/check-cupid-embedded-dxe.py --fd ARTIFACT_DIR/SILICIUM_UEFI.fd \
+  --dxe ARTIFACT_DIR/DxeCore.efi
+```

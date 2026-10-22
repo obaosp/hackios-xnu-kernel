@@ -31,7 +31,7 @@ def main():
     assert original[-24:] == bytes(24)
     checks = {}
     for stage in a.stages:
-        assert 1 <= stage <= 12
+        assert 1 <= stage <= 14
         extra = struct.pack('<16sII', b'sec-stop', 4, 0)+struct.pack('<I', stage)+bytes(12)
         body = original[8:-24]+extra+bytes(24)
         payload = b'XNUP'+struct.pack('<I',len(body))+body
