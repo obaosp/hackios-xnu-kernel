@@ -162,3 +162,23 @@ All seven v003 SEC checkpoints passed user hardware testing, including FV
 decompression and the point before LoadDxeCoreFromFv. This does not prove DXE
 executed or that the FV-list correction fixes the later failure. v004 adds
 the corrected ABI and DXE checkpoints so the next failure can be localized.
+
+## DXE driver trace
+
+All five v004 DXE checkpoints passed user testing. The continuing loader stays
+on gold and USB does not reconnect. The last visible checkpoint is before
+CoreDispatcher; the failing driver or dispatcher operation is still unknown.
+
+cupid-dispatch-diagnostics.patch instruments dispatcher entry, each driver's
+load/start/return, queue removal, event signaling and dependency search. The
+CupidDispatchDiagnostics.h renderer writes text directly to the first 720 rows
+of the proven splash framebuffer. It needs no allocation, console, storage or
+USB. Driver names and GUIDs are generated from the prepared platform INFs;
+the full GUID remains visible for an unknown driver. The phase, sequence,
+driver name, status and GUID identify the last operation that ran.
+
+Trace builds retain all driver calls and stock binaries. A trace at START
+without a later RETURN implicates that driver's initialization or a callback
+it invokes. A trace at LOAD points to image loading or its callbacks. Vendor
+drivers may disable scanout, so disappearance of text needs further probes.
+The trace uses no delay or timer dependency and has no automatic restart.

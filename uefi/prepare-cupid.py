@@ -73,6 +73,12 @@ def prepare(args):
     apply_once(basecore, dxe_patch, 'Cupid DXE diagnostics')
     shutil.copy2(HERE/'files'/sec/'CupidDiagnostics.h',
                  basecore/'MdeModulePkg/Core/Dxe/DxeMain/CupidDiagnostics.h')
+    dispatch_patch = (HERE/'cupid-dispatch-diagnostics.patch').read_text().replace('\n', '\r\n').encode()
+    apply_once(basecore, dispatch_patch, 'Cupid dispatcher diagnostics')
+    shared_dir = basecore/'MdeModulePkg/Core/Dxe/DxeMain'
+    shutil.copy2(HERE/'files'/sec/'CupidDispatchDiagnostics.h',
+                 shared_dir/'CupidDispatchDiagnostics.h')
+    write_driver_names(mu, shared_dir/'CupidDriverNames.h')
     # Reports stay local alongside the vendor inputs, outside this source repository.
     report = {'mu_commit': commit, 'firmware_build': BUILD_ID,
               'driver_policy': 'unmodified stock Cupid drivers; hardware compatibility pending',
@@ -93,6 +99,37 @@ def apply_once(tree, patch, label):
                              input=patch, capture_output=True)
     if reverse.returncode:
         raise ValueError(label+' patch is neither applicable nor already applied')
+
+
+def write_driver_names(mu, output):
+    """Generate public driver GUID/name labels from the prepared platform INFs."""
+    import uuid
+    sources = set()
+    for inc in (mu/'Platforms/Xiaomi/cupidPkg/Include').glob('*.inc'):
+        sources.update(re.findall(r'\bINF\s+(\S+)', inc.read_text()))
+    entries = {}
+    roots = [mu, mu/'Mu_Basecore', mu/'Silicon/ARM',
+             mu/'Silicon/Silicium', mu/'Common/Mu']
+    for source in sorted(sources):
+        path = next((root/source for root in roots if (root/source).is_file()), None)
+        if path is None:
+            raise ValueError('cannot resolve trace driver INF: '+source)
+        text = path.read_text()
+        guid = re.search(r'FILE_GUID\s*=\s*([0-9a-fA-F-]+)', text)
+        name = re.search(r'BASE_NAME\s*=\s*(\S+)', text)
+        if guid and name:
+            identity = uuid.UUID(guid[1])
+            entries[identity] = re.sub(r'[^A-Za-z0-9 -]', ' ', name[1])[:28]
+    lines = ['/* Generated from prepared driver INFs; no binary firmware data. */',
+             'STATIC CONST struct { EFI_GUID Guid; CONST CHAR8 *Name; } CupidDriverNames[] = {']
+    for identity, name in sorted(entries.items()):
+        fields = identity.fields
+        tail = identity.bytes[8:]
+        initializer = '{0x%08X,0x%04X,0x%04X,{%s}}' % (
+            fields[0], fields[1], fields[2], ','.join('0x%02X' % b for b in tail))
+        lines.append('  {%s, "%s"},' % (initializer, name))
+    lines.append('};')
+    output.write_text('\n'.join(lines)+'\n')
 
 
 def main():

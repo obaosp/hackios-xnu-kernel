@@ -1,0 +1,81 @@
+diff --git a/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c b/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c
+--- a/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c
++++ b/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c
+@@ -32,6 +32,11 @@
+ **/
+ 
+ #include "DxeMain.h"
++#include "CupidDispatchDiagnostics.h"
++
++#ifdef CUPID_EARLY_DIAGNOSTICS
++STATIC UINTN CupidDriverSequence;
++#endif
+ 
+ //
+ // The Driver List contains one copy of every driver that has been discovered.
+@@ -408,6 +413,7 @@
+   BOOLEAN                ReadyToRun;
+   EFI_EVENT              DxeDispatchEvent;
+ 
++  CupidTraceDriver (CupidDriverSequence, NULL, "DISPATCH ENTRY", 0);
+   PERF_FUNCTION_BEGIN ();
+ 
+   if (gDispatcherRunning) {
+@@ -453,6 +459,7 @@
+       //
+       if ((DriverEntry->ImageHandle == NULL) && !DriverEntry->IsFvImage) {
+         DEBUG ((DEBUG_INFO, "Loading driver %g\n", &DriverEntry->FileName));
++        CupidTraceDriver (++CupidDriverSequence, &DriverEntry->FileName, "LOAD", 0);
+         Status = CoreLoadImage (
+                    FALSE,
+                    gDxeCoreImageHandle,
+@@ -462,6 +469,8 @@
+                    &DriverEntry->ImageHandle
+                    );
+ 
++        CupidTraceDriver (CupidDriverSequence, &DriverEntry->FileName, "LOADED", Status);
++
+         //
+         // Update the driver state to reflect that it's been loaded
+         //
+@@ -503,6 +512,7 @@
+ 
+       CoreReleaseDispatcherLock ();
+ 
++      CupidTraceDriver (CupidDriverSequence, &DriverEntry->FileName, "QUEUE REMOVED", 0);
+       if (DriverEntry->IsFvImage) {
+         //
+         // Produce a firmware volume block protocol for FvImage so it gets dispatched from.
+@@ -517,7 +527,9 @@
+           );
+         ASSERT (DriverEntry->ImageHandle != NULL);
+ 
++        CupidTraceDriver (CupidDriverSequence, &DriverEntry->FileName, "START", 0);
+         Status = CoreStartImage (DriverEntry->ImageHandle, NULL, NULL);
++        CupidTraceDriver (CupidDriverSequence, &DriverEntry->FileName, "RETURN", Status);
+ 
+         REPORT_STATUS_CODE_WITH_EXTENDED_DATA (
+           EFI_PROGRESS_CODE,
+@@ -536,12 +548,14 @@
+     // on UEFI protocols
+     //
+     if (!EFI_ERROR (ReturnStatus)) {
++      CupidTraceDriver (CupidDriverSequence, NULL, "SIGNAL EVENT", 0);
+       CoreSignalEvent (DxeDispatchEvent);
+     }
+ 
+     //
+     // Search DriverList for items to place on Scheduled Queue
+     //
++    CupidTraceDriver (CupidDriverSequence, NULL, "DEPEX SEARCH", 0);
+     ReadyToRun = FALSE;
+     for (Link = mDiscoveredList.ForwardLink; Link != &mDiscoveredList; Link = Link->ForwardLink) {
+       DriverEntry = CR (Link, EFI_CORE_DRIVER_ENTRY, Link, EFI_CORE_DRIVER_ENTRY_SIGNATURE);
+@@ -571,6 +585,7 @@
+   //
+   // Close DXE dispatch Event
+   //
++  CupidTraceDriver (CupidDriverSequence, NULL, "DISPATCH DONE", ReturnStatus);
+   CoreCloseEvent (DxeDispatchEvent);
+ 
+   gDispatcherRunning = FALSE;
