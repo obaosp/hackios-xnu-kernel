@@ -31,7 +31,9 @@ android_device_xiaomi_cupid/proprietary-firmware.txt). The user supplied uefi.im
 and the original memory map from uefi.img into the separate local reference
 folder. Do not substitute redwood's binary drivers.
 
-The cupid profile uses the stock FD region at 0xa7000000 (4 MiB). Its XNUP
+The cupid profile preserves stock SEC at 0xa7000000..0xa7100000 and places
+the new FD at 0xa7100000 (3 MiB). Mu scans the preserved SEC code for the live
+Qualcomm scheduler and DTB-extension interfaces. Its XNUP
 payload region is 0xf6000000..0xfa000000: this lies wholly in the supplied runtime
 FDT RAM and overlaps none of its explicit reserved regions. The UEFI map reserves
 it and shortens the stock DXE heap to 0xfa000000..0xffc00000. These choices still
@@ -49,7 +51,7 @@ and runtime FDTs stay local.
 
 ## Build status and first hardware milestone
 
-A source-built Cupid UEFI FD (4 MiB), Cupid loader, XNU kernel (15,144,880
+The first source-built Cupid UEFI FD (4 MiB), Cupid loader, XNU kernel (15,144,880
 bytes) and minimal diagnostic APFS image exist. Mu's postbuild validation
 passed 49 source-built PE images; the minimal APFS image passed `apfsck` and
 the kernel APFS reader's comparison of all 14 entries. XNU linked successfully,
@@ -57,7 +59,10 @@ then hit the upstream documented IOKit export-list check failure.
 
 The loader-only boot image has Android header v4 and a host-validated shim,
 UEFI FD, XNUP container and appended supplied FDT. It does not launch iOS.
-The first user boot test is pending. See [the Cupid UEFI build instructions](../uefi/CUPID.md)
+The v001 hardware test was accepted by stock fastboot but stayed black with no
+USB reconnect, requiring a power-key reboot. It overwrote the stock SEC region;
+this mismatch is corrected in the next build, with hardware causality still pending.
+Stand-alone handoff probes isolate code execution from custom UEFI. See [the Cupid UEFI build instructions](../uefi/CUPID.md)
 for preparation, structural validation, USB log collection, and the stock
 driver compatibility limitations.
 
@@ -65,3 +70,20 @@ When using `xl`, set `DEVICE=cupid`. This selects the correct packing
 addresses and conservative kernel arguments. Both the build script and `xl`
 check `xnuloader/loader.target` to reject a loader built for another profile.
 Touch, Adreno730, QCA6490 Wi-Fi and the other peripheral ports remain pending.
+
+## First-stage probes
+
+```sh
+python3 tools/build-cupid-probe.py --fdt ../Documents/fdt-cupid/fdt \
+  --output ../codex-cupid/artifacts/probe-v001
+```
+
+The reset probe uses a stock-compatible ARM64 header (text_offset0, flags0xa),
+a 2 MiB padded Image, and the supplied appended FDT in boot header v4. It waits
+eight seconds on the architectural counter then invokes PSCI SYSTEM_RESET via
+SMC. Exception vectors request an immediate reset. It has no UEFI, USB, storage
+or stack dependencies. Raw and gzip forms contain identical ARM64 Images.
+The optional display probe writes yellow within the splash reservation; panel
+scanout may already be disabled, so its visibility requires hardware validation.
+Boot with fastboot boot; report transfer output and restart timing before
+advancing to a new UEFI image.

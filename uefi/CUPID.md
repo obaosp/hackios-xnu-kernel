@@ -81,3 +81,19 @@ The display uses SimpleFbDxe over the `0xb8000000` splash reservation. Its GOP
 geometry is configured as 1080 by 2400, 32-bit BGRX; physical scanout and stride
 still require hardware confirmation. Raw HackiOS log partition writes and
 firmware log syncing are disabled in this diagnostic configuration.
+
+## v001 failure and revised placement
+
+The user booted v001: stock fastboot reported sending and booting OKAY, then the
+phone stayed black and USB did not reconnect. A power-key reboot recovered
+Android. This establishes transfer acceptance; no custom code execution is proven.
+
+The supplied uefi.img places SEC at 0xa7000000. Its first MiB contains the HOB
+registration function signatures and scheduler/DTB GUIDs scanned by Mu's
+PlatformPeiLib/XblProtocols.c. v001 replaced that area and omitted FD Reserved.
+Cupid now reserves the first MiB and builds a 3 MiB FD at 0xa7100000. The packed
+shim must use the same updated destination and size. This corrects a concrete
+firmware compatibility mismatch; hardware tests must establish the hang's cause.
+The frozen v001 image can be checked using `--fd-base 0xa7000000 --fd-size 0x400000`.
+
+See tools/build-cupid-probe.py for independent handoff diagnostics before UEFI.

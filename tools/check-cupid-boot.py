@@ -111,8 +111,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('image', 'shim', 'fd', 'payload', 'loader', 'fdt'):
         parser.add_argument('--'+name, type=Path, required=True)
-    parser.add_argument('--fd-base', type=lambda v: int(v, 0), default=0xa7000000)
-    parser.add_argument('--fd-size', type=lambda v: int(v, 0), default=0x400000)
+    parser.add_argument('--fd-base', type=lambda v: int(v, 0), default=0xa7100000)
+    parser.add_argument('--fd-size', type=lambda v: int(v, 0), default=0x300000)
     parser.add_argument('--payload-base', type=lambda v: int(v, 0), default=0xf6000000)
     args = parser.parse_args()
     try:
