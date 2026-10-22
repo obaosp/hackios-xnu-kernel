@@ -3,7 +3,8 @@
 The platform sources target Xiaomi 12 (SM8450), using the supplied runtime FDT
 and stock `BOOT.MXF.2.0-01018.3-WAIPIO-1` configuration. Mu is pinned by `BASE`.
 The stock binaries are installed locally from the user's `uefi.img`, separate
-from the source repository. No successful hardware boot is established yet.
+from the source repository. SEC and DXE entry have run on hardware; loader USB,
+XNU and iOS boot remain unverified.
 
 ## Prepare local inputs
 
@@ -132,8 +133,9 @@ A frozen baseline validated by tools/check-cupid-boot.py can produce the
 stopping variants with tools/pack-cupid-sec-stops.py --artifact ARTIFACT_DIR
 --baseline cupid-loader-v004.img --stages 8 9 10 11 12. Stage 8 and later
 require the DXE diagnostics patch; v003 supports stages 1 through 7 only.
-Always test stage1 before advancing. Full source/userland compilation and APFS
-validation do not establish a working XNU or iOS boot.
+Stages 1 through 14 already passed Cupid hardware tests. Do not repeat the
+checkpoint sequence when continuing from those results. Full source/userland
+compilation and APFS validation do not establish a working XNU or iOS boot.
 
 ## Cupid stock FV-list ABI
 
@@ -165,14 +167,16 @@ the corrected ABI and DXE checkpoints so the next failure can be localized.
 
 ## DXE driver trace
 
-All five v004 DXE checkpoints passed user testing. The continuing loader stays
-on gold and USB does not reconnect. The last visible checkpoint is before
-CoreDispatcher; the failing driver or dispatcher operation is still unknown.
+All five v004 DXE checkpoints passed user testing. v006 reaches azure at
+CoreDispatcher entry, then remains azure without text or USB for 40 seconds.
+The failing driver or dispatcher operation is still unknown. Passing the stopping
+variant's reset branch does not prove the normal continuation returns.
 
 cupid-dispatch-diagnostics.patch instruments dispatcher entry, each driver's
 load/start/return, queue removal, event signaling and dependency search. The
-CupidDispatchDiagnostics.h renderer writes text directly to the first 720 rows
-of the proven splash framebuffer. It needs no allocation, console, storage or
+CupidDispatchDiagnostics.h renderer writes high-contrast text in three repeated
+panels over the full assumed splash framebuffer, then cleans cache lines. It
+needs no allocation, console, storage or
 USB. Driver names and GUIDs are generated from the prepared platform INFs;
 the full GUID remains visible for an unknown driver. The phase, sequence,
 driver name, status and GUID identify the last operation that ran.
@@ -182,6 +186,7 @@ without a later RETURN implicates that driver's initialization or a callback
 it invokes. A trace at LOAD points to image loading or its callbacks. Vendor
 drivers may disable scanout, so disappearance of text needs further probes.
 The trace uses no delay or timer dependency and has no automatic restart.
+It shows DAIF and CurrentEL as the final pair of hexadecimal numbers.
 
 v005 stayed gold for 40 seconds without trace text. Independent decompression
 confirmed the trace-enabled DXE core is present in the packed FD. v006 adds
@@ -197,3 +202,27 @@ Verify embedded core identity separately from boot packing:
 python3 tools/check-cupid-embedded-dxe.py --fd ARTIFACT_DIR/SILICIUM_UEFI.fd \
   --dxe ARTIFACT_DIR/DxeCore.efi
 ```
+
+## v007 and the visible text control
+
+The standalone [display probe](../docs/cupid-display-probe.md) showed a pink
+checkerboard with four readable `CUPID ASSUMED LAYOUT` text blocks for 3–4 seconds,
+then black and reset before any register report. This establishes text visibility
+at the stock handoff. It does not establish live stride or full-frame geometry,
+and does not prove text remains visible after Mu changes the MMU/SMMU setup.
+The early reset is consistent with an exception during display-register reads;
+there is no readable fault address or exact exception attribution.
+
+v007 repeats the trace across the buffer, uses white glyphs over black cells and
+explicit cache cleaning, and makes the renderer a separate compiled function.
+Dispatcher entry prints a constant trace before reading dispatcher globals, then
+traces those globals and event creation before the existing load/start/return
+traces. Drivers and driver order remain unchanged from v006. There are no display
+MMIO reads or new vendor binary patches in this version.
+
+The optional `tools/check-cupid-dxe-entry.py ARTIFACT_DIR` executes the frozen
+ARM64 PE at a nonzero address using `pefile`, `unicorn` and `pillow`. It checks the
+normal stage-14 return, the three pre-event labels and all repeated text panels,
+including the compiled cache-clean loop, stopping before the real event
+constructor. It skips delays and does not model physical MMU/IOMMU, interrupts,
+scanout or vendor drivers. These limits also apply to screenshots from emulation.

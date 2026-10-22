@@ -14,16 +14,33 @@ diff --git a/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c b/MdeModulePkg/Core/D
  
  //
  // The Driver List contains one copy of every driver that has been discovered.
-@@ -408,6 +414,8 @@
+@@ -408,6 +414,9 @@
    BOOLEAN                ReadyToRun;
    EFI_EVENT              DxeDispatchEvent;
  
 +  CupidEarlyStage (14);
-+  CupidTraceDriver (CupidDriverSequence, NULL, "DISPATCH ENTRY", 0);
++  CupidTraceDriver (0, NULL, "DISPATCH ENTRY", 0);
++  CupidTraceDriver (CupidDriverSequence, NULL, "DISPATCH GLOBALS", gDispatcherRunning);
    PERF_FUNCTION_BEGIN ();
  
    if (gDispatcherRunning) {
-@@ -453,6 +461,7 @@
+@@ -420,6 +429,7 @@
+ 
+   gDispatcherRunning = TRUE;
+ 
++  CupidTraceDriver (CupidDriverSequence, NULL, "CREATE DISPATCH EVENT", 0);
+   Status = CoreCreateEventEx (
+              EVT_NOTIFY_SIGNAL,
+              TPL_NOTIFY,
+@@ -428,6 +438,7 @@
+              &gEfiEventDxeDispatchGuid,
+              &DxeDispatchEvent
+              );
++  CupidTraceDriver (CupidDriverSequence, NULL, "DISPATCH EVENT CREATED", Status);
+   if (EFI_ERROR (Status)) {
+     PERF_FUNCTION_END ();
+     return Status;
+@@ -453,6 +464,7 @@
        //
        if ((DriverEntry->ImageHandle == NULL) && !DriverEntry->IsFvImage) {
          DEBUG ((DEBUG_INFO, "Loading driver %g\n", &DriverEntry->FileName));
@@ -31,7 +48,7 @@ diff --git a/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c b/MdeModulePkg/Core/D
          Status = CoreLoadImage (
                     FALSE,
                     gDxeCoreImageHandle,
-@@ -462,6 +471,8 @@
+@@ -462,6 +474,8 @@
                     &DriverEntry->ImageHandle
                     );
  
@@ -40,7 +57,7 @@ diff --git a/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c b/MdeModulePkg/Core/D
          //
          // Update the driver state to reflect that it's been loaded
          //
-@@ -503,6 +514,7 @@
+@@ -503,6 +517,7 @@
  
        CoreReleaseDispatcherLock ();
  
@@ -48,7 +65,7 @@ diff --git a/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c b/MdeModulePkg/Core/D
        if (DriverEntry->IsFvImage) {
          //
          // Produce a firmware volume block protocol for FvImage so it gets dispatched from.
-@@ -517,7 +529,9 @@
+@@ -517,7 +532,9 @@
            );
          ASSERT (DriverEntry->ImageHandle != NULL);
  
@@ -58,7 +75,7 @@ diff --git a/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c b/MdeModulePkg/Core/D
  
          REPORT_STATUS_CODE_WITH_EXTENDED_DATA (
            EFI_PROGRESS_CODE,
-@@ -536,12 +550,14 @@
+@@ -536,12 +553,14 @@
      // on UEFI protocols
      //
      if (!EFI_ERROR (ReturnStatus)) {
@@ -73,7 +90,7 @@ diff --git a/MdeModulePkg/Core/Dxe/Dispatcher/Dispatcher.c b/MdeModulePkg/Core/D
      ReadyToRun = FALSE;
      for (Link = mDiscoveredList.ForwardLink; Link != &mDiscoveredList; Link = Link->ForwardLink) {
        DriverEntry = CR (Link, EFI_CORE_DRIVER_ENTRY, Link, EFI_CORE_DRIVER_ENTRY_SIGNATURE);
-@@ -571,6 +587,7 @@
+@@ -571,6 +590,7 @@
    //
    // Close DXE dispatch Event
    //

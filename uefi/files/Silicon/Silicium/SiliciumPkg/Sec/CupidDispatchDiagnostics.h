@@ -30,9 +30,9 @@ STATIC CONST UINT8 CupidTraceGlyphs[][7] = {
 STATIC VOID CupidTraceText (UINTN Row, CONST CHAR8 *Text, UINT32 Color)
 {
   volatile UINT32 *Fb = (volatile UINT32 *)0xB8000000ULL;
-  CONST UINTN Scale = 6;
-  UINTN X = 36;
-  for (UINTN Ch = 0; Text[Ch] && Ch < 28; Ch++, X += 6 * Scale) {
+  CONST UINTN Scale = 4;
+  UINTN X = 12;
+  for (UINTN Ch = 0; Text[Ch] && Ch < 40; Ch++, X += 6 * Scale) {
     UINT8 C = (UINT8)Text[Ch];
     if (C >= 'a' && C <= 'z') {
       C -= 'a' - 'A';
@@ -47,18 +47,13 @@ STATIC VOID CupidTraceText (UINTN Row, CONST CHAR8 *Text, UINT32 Color)
     } else if (C == ':') {
       Glyph = 37;
     } else {
-      continue;
+      Glyph = ARRAY_SIZE (CupidTraceGlyphs);
     }
-    for (UINTN Y = 0; Y < 7; Y++) {
-      for (UINTN Bit = 0; Bit < 5; Bit++) {
-        if (!(CupidTraceGlyphs[Glyph][Y] & (1U << (4 - Bit)))) {
-          continue;
-        }
-        for (UINTN Dy = 0; Dy < Scale; Dy++) {
-          for (UINTN Dx = 0; Dx < Scale; Dx++) {
-            Fb[(Row + Y * Scale + Dy) * 1080 + X + Bit * Scale + Dx] = Color;
-          }
-        }
+    for (UINTN Y = 0; Y < 9 * Scale; Y++) {
+      for (UINTN Dx = 0; Dx < 6 * Scale; Dx++) {
+        BOOLEAN Lit = Glyph < ARRAY_SIZE (CupidTraceGlyphs) && Y / Scale < 7 &&
+          Dx / Scale < 5 && (CupidTraceGlyphs[Glyph][Y / Scale] & (1U << (4 - Dx / Scale)));
+        Fb[(Row + Y) * 1080 + X + Dx] = Lit ? Color : 0xFF000000;
       }
     }
   }
@@ -74,14 +69,14 @@ STATIC VOID CupidTraceHex (CHAR8 *Text, UINT64 Value, UINTN Digits)
   Text[Digits] = 0;
 }
 
-STATIC VOID CupidTraceDriver (
+STATIC __attribute__((noinline)) VOID CupidTraceDriver (
   UINTN Sequence, CONST EFI_GUID *Guid, CONST CHAR8 *Phase, EFI_STATUS Status)
 {
   volatile UINT32 *Fb = (volatile UINT32 *)0xB8000000ULL;
-  CHAR8 Text[29];
+  CHAR8 Text[41];
   CONST CHAR8 *Name = "UNKNOWN DRIVER";
-  for (UINTN Pixel = 0; Pixel < 1080 * 720; Pixel++) {
-    Fb[Pixel] = 0x00101010;
+  for (UINTN Pixel = 0; Pixel < 1080 * 2400; Pixel++) {
+    Fb[Pixel] = 0xFF101030;
   }
   if (Guid != NULL) {
     for (UINTN I = 0; I < ARRAY_SIZE (CupidDriverNames); I++) {
@@ -101,24 +96,40 @@ STATIC VOID CupidTraceDriver (
       }
     }
   }
-  CupidTraceText (36, "CUPID DXE TRACE", 0x00FFFFFF);
-  CupidTraceText (108, Phase, 0x00FFFF00);
-  CupidTraceHex (Text, Sequence, 4);
-  CupidTraceText (180, Text, 0x00FFFFFF);
-  CupidTraceText (252, Name, 0x0000FFFF);
-  CupidTraceHex (Text, Status, 16);
-  CupidTraceText (324, Text, 0x00FFFFFF);
-  if (Guid != NULL) {
-    CupidTraceHex (Text, Guid->Data1, 8);
-    Text[8] = '-';
-    CupidTraceHex (Text + 9, Guid->Data2, 4);
-    Text[13] = '-';
-    CupidTraceHex (Text + 14, Guid->Data3, 4);
-    CupidTraceText (396, Text, 0x00FFFFFF);
-    for (UINTN I = 0; I < 8; I++) {
-      CupidTraceHex (Text + 2 * I, Guid->Data4[I], 2);
+  for (UINTN Panel = 0; Panel < 2400; Panel += 800) {
+    CupidTraceText (Panel + 32, "CUPID DXE TRACE V007", 0xFFFFFFFF);
+    CupidTraceText (Panel + 88, Phase, 0xFFFFFFFF);
+    CupidTraceHex (Text, Sequence, 4);
+    CupidTraceText (Panel + 144, Text, 0xFFFFFFFF);
+    CupidTraceText (Panel + 200, Name, 0xFFFFFFFF);
+    CupidTraceHex (Text, Status, 16);
+    CupidTraceText (Panel + 256, Text, 0xFFFFFFFF);
+    if (Guid != NULL) {
+      CupidTraceHex (Text, Guid->Data1, 8);
+      Text[8] = '-';
+      CupidTraceHex (Text + 9, Guid->Data2, 4);
+      Text[13] = '-';
+      CupidTraceHex (Text + 14, Guid->Data3, 4);
+      CupidTraceText (Panel + 312, Text, 0xFFFFFFFF);
+      for (UINTN I = 0; I < 8; I++) {
+        CupidTraceHex (Text + 2 * I, Guid->Data4[I], 2);
+      }
+      CupidTraceText (Panel + 368, Text, 0xFFFFFFFF);
     }
-    CupidTraceText (468, Text, 0x00FFFFFF);
+    UINT64 State;
+    __asm__ volatile ("mrs %0, daif" : "=r" (State));
+    CupidTraceHex (Text, State, 4);
+    Text[4] = ' ';
+    __asm__ volatile ("mrs %0, CurrentEL" : "=r" (State));
+    CupidTraceHex (Text + 5, State, 4);
+    CupidTraceText (Panel + 424, Text, 0xFFFFFFFF);
+  }
+  /* Full fills alone do not show whether glyph stores reached scanout. */
+  UINT64 Ctr;
+  __asm__ volatile ("mrs %0, ctr_el0" : "=r" (Ctr));
+  UINTN Line = (UINTN)4 << ((Ctr >> 16) & 15);
+  for (UINTN Address = 0xB8000000ULL; Address < 0xB89E3400ULL; Address += Line) {
+    __asm__ volatile ("dc cvac, %0" : : "r" (Address) : "memory");
   }
   __asm__ volatile ("dsb sy" : : : "memory");
 }
