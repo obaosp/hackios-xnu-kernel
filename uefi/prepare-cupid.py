@@ -55,11 +55,13 @@ def prepare(args):
     shutil.copy2(HERE/'files/Resources/Configs/cupid.toml', mu/'Resources/Configs/cupid.toml')
     shutil.copy2(fdt, mu/'Resources/DTBs/cupid.dtb')
     diagnostics = HERE/'cupid-diagnostics.patch'
-    check = subprocess.run(['git', '-C', str(mu), 'apply', '--check', str(diagnostics)], capture_output=True)
+    # Mu SEC sources use CRLF; keep our patch LF in Git and match source endings here.
+    diagnostic_patch = diagnostics.read_text().replace('\n', '\r\n').encode()
+    check = subprocess.run(['git', '-C', str(mu), 'apply', '--check', '-'], input=diagnostic_patch, capture_output=True)
     if check.returncode == 0:
-        subprocess.run(['git', '-C', str(mu), 'apply', str(diagnostics)], check=True)
+        subprocess.run(['git', '-C', str(mu), 'apply', '-'], input=diagnostic_patch, check=True)
     else:
-        reverse = subprocess.run(['git', '-C', str(mu), 'apply', '--reverse', '--check', str(diagnostics)], capture_output=True)
+        reverse = subprocess.run(['git', '-C', str(mu), 'apply', '--reverse', '--check', '-'], input=diagnostic_patch, capture_output=True)
         if reverse.returncode:
             raise ValueError('Cupid diagnostics patch is neither applicable nor already applied')
     sec = 'Silicon/Silicium/SiliciumPkg/Sec'
