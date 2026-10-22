@@ -25,6 +25,7 @@ def env_int(name, default):
     v = os.environ.get(name, '')
     return int(v, 0) if v else default
 TARGET = os.environ.get('UEFI_TARGET') or 'redwood'
+HEADER_VERSION = env_int('BOOT_HEADER_VERSION', 1)
 FD_BASE, FD_SIZE = env_int('FD_BASE', 0x9FD00000), env_int('FD_SIZE', 0x200000)
 PAYLOAD_BASE, PAYLOAD_MAX = env_int('PAYLOAD_BASE', 0xF0000000), 0x04000000
 
@@ -47,6 +48,8 @@ if os.path.isfile(fd_path) and os.path.isdir(os.path.join(MU, 'BootShim')):
              'dtb': os.path.join(MU, f'Resources/DTBs/{TARGET}.dtb'), 'ramdisk': os.path.join(MU, 'Resources/ramdisk'),
              'mkbootimg': os.path.join(MU, 'Resources/Scripts/mkbootimg.py')}
 else:
+    if TARGET != 'redwood':
+        sys.exit(f'{TARGET}: requires a built device UEFI and BootShim tree; redwood prebuilt is incompatible')
     parts = {'shim': os.path.join(PREBUILT, 'BootShim.bin'), 'fd': os.path.join(PREBUILT, 'SILICIUM_UEFI.fd'),
              'dtb': os.path.join(PREBUILT, 'redwood.dtb'), 'ramdisk': os.path.join(PREBUILT, 'ramdisk'),
              'mkbootimg': os.path.join(PREBUILT, 'mkbootimg.py')}
@@ -67,10 +70,10 @@ if args.payload:
 if os.environ.get('DTB'): parts['dtb'] = os.environ['DTB']
 dtb = open(parts['dtb'], 'rb').read()
 kernel = args.output + '.kernel~'
-open(kernel, 'wb').write(gzip.compress(blob, 6) + dtb)
+open(kernel, 'wb').write(gzip.compress(blob, 6, mtime=0) + dtb)
 try:
     subprocess.check_call([sys.executable, parts['mkbootimg'], '--kernel', kernel, '--ramdisk', parts['ramdisk'],
-                           '--header_version', '1', '-o', args.output])
+                           '--header_version', str(HEADER_VERSION), '-o', args.output])
 finally:
     os.unlink(kernel)
 print(f'{args.output}: {os.path.getsize(args.output)} bytes (shim {len(shim)}, uncompressed {len(blob)})')

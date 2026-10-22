@@ -50,6 +50,7 @@ Log (
 
 #define READ_SYSREG(Name) ({ UINT64 _Value; __asm__ volatile ("mrs %0, " #Name : "=r" (_Value)); _Value; })
 
+#ifndef XNU_RAM_DIAGNOSTICS
 STATIC
 EFI_BLOCK_IO_PROTOCOL *
 FindPartition (
@@ -85,6 +86,7 @@ FindPartition (
 
   return NULL;
 }
+#endif
 
 STATIC
 VOID
@@ -209,6 +211,9 @@ STATIC
 VOID
 FlushLog ()
 {
+#ifdef XNU_RAM_DIAGNOSTICS
+  return;
+#else
   EFI_STATUS             Status;
   EFI_BLOCK_IO_PROTOCOL *BlockIo;
   UINTN                  BlockSize;
@@ -226,6 +231,7 @@ FlushLog ()
   if (!EFI_ERROR (Status)) {
     BlockIo->FlushBlocks (BlockIo);
   }
+#endif
 }
 
 //

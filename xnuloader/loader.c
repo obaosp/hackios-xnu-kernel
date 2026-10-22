@@ -15,7 +15,9 @@
 /* ------------------------------------------------------------------------ */
 /* Fixed conventions shared with the boot shim, the packer and the kernel   */
 
+#ifndef PAYLOAD_BASE
 #define PAYLOAD_BASE        0xF0000000ULL
+#endif
 #define PAYLOAD_MAGIC       0x50554E58u /* "XNUP" */
 
 struct payload_header { uint32_t magic; uint32_t size; };
@@ -257,6 +259,10 @@ clean_dcache(uint64_t start, uint64_t end)
 static efi_block_io *
 find_log_partition(void)
 {
+#ifdef CUPID_LOADER
+	/* Initial cupid diagnostics are fetched over USB; leave existing partitions untouched. */
+	return NULL;
+#else
 	static const efi_guid part_guid = EFI_PARTITION_INFO_GUID;
 	static const efi_guid blk_guid = EFI_BLOCK_IO_GUID;
 	static const char16 want[] = LOG_PARTITION;
@@ -285,6 +291,7 @@ find_log_partition(void)
 		}
 	}
 	return NULL;
+#endif
 }
 
 /*
@@ -517,6 +524,7 @@ struct platform {
 	const char *name;
 	uint64_t io_base, io_size;       /* one window covering the SoC peripherals */
 	uint64_t gic_dist, gic_redist;   /* GICv3 */
+	uint64_t gic_redist_size, gic_redist_stride; /* 0: original 1 MiB region / 128 KiB frames */
 	uint64_t uart;                   /* PL011, 0 if none */
 	int psci_hvc;                    /* the firmware's power interface is called with HVC, not SMC */
 	int log_other_cpu;               /* keep notes in the log partition while a kernel starts on another core */
@@ -553,14 +561,27 @@ static const struct platform platform_redwood = {
 	.fb_base = 0xE1000000,
 };
 
+static const struct platform platform_cupid = {
+	/* Documents/fdt-cupid/fdt: Qualcomm SM8450, runtime tree from Xiaomi 12. */
+	.name = "cupid", .io_base = 0x00400000, .io_size = 0x3FC00000,
+	.gic_dist = 0x17100000, .gic_redist = 0x17180000,
+	.gic_redist_size = 0x200000, .gic_redist_stride = 0x40000,
+	.cores = 8, .core_shift = 8, .small_cores = 0x0f,
+	/* Reserved splash region; verify the actual GOP base at first UEFI boot. */
+	.fb_base = 0xB8000000,
+};
+
 /*
  * The devices the loader knows, told apart by the framebuffer base their UEFI reports. A port to another
  * device adds its description here (common/new-device.sh writes a starting point, docs/PORTING.md says
  * where each value comes from); a display that matches none is QEMU's ramfb.
  */
+#ifndef CUPID_LOADER
 static const struct platform *const platforms[] = {
 	&platform_redwood,
+	&platform_cupid,
 };
+#endif
 
 /* ------------------------------------------------------------------------ */
 
@@ -3246,8 +3267,11 @@ run_kernel(int have_checkpoint, uint64_t checkpoint)
 	dt_begin(&w, "gic");
 	dt_prop_str(&w, "device_type", "interrupt-controller");
 	dt_prop_str(&w, "compatible", "arm,gic-v3");
-	uint64_t gic_reg[4] = { plat->gic_dist - plat->io_base, 0x10000, plat->gic_redist - plat->io_base, 0x100000 };
+	uint64_t gic_reg[4] = { plat->gic_dist - plat->io_base, 0x10000, plat->gic_redist - plat->io_base,
+		plat->gic_redist_size ? plat->gic_redist_size : 0x100000 };
 	dt_prop(&w, "reg", gic_reg, sizeof(gic_reg));
+	if (plat->gic_redist_stride != 0)
+		dt_prop(&w, "redistributor-stride", &plat->gic_redist_stride, sizeof(plat->gic_redist_stride));
 	dt_end(&w);
 	if (plat->uart != 0) {
 		dt_begin(&w, "uart0");
@@ -3932,7 +3956,11 @@ efi_main(efi_handle image, efi_system_table *st)
 	print("CurrentEL=%x MIDR=%x MMFR0=%x CNTFRQ=%d image=%x\n", READ_SYSREG(CurrentEL) >> 2, READ_SYSREG(MIDR_EL1),
 	    READ_SYSREG(ID_AA64MMFR0_EL1), READ_SYSREG(CNTFRQ_EL0), (uint64_t)(uintptr_t)&__ImageBase);
 
+#ifdef CUPID_LOADER
+	PLAT = &platform_cupid;
+#else
 	PLAT = &platform_qemu_virt;
+#endif
 	if (EFI_ERROR(BS->locate_protocol(&gop_guid, NULL, (void **)&GOP)) || GOP->mode == NULL ||
 	    GOP->mode->info == NULL || GOP->mode->fb_base == 0) {
 		GOP = NULL;                     /* no display (QEMU without -device ramfb) */
@@ -3941,9 +3969,11 @@ efi_main(efi_handle image, efi_system_table *st)
 		SCREEN.width = GOP->mode->info->width;
 		SCREEN.height = GOP->mode->info->height;
 		SCREEN.stride = GOP->mode->info->pixels_per_scanline * 4;
+#ifndef CUPID_LOADER
 		for (unsigned i = 0; i < sizeof(platforms) / sizeof(platforms[0]); i++)
 			if (platforms[i]->fb_base == SCREEN.base)
 				PLAT = platforms[i];
+#endif
 		if (PLAT == &platform_qemu_virt)
 			ramfb_phone_screen();
 		print("display %d x %d at %x\n", (uint64_t)SCREEN.width, (uint64_t)SCREEN.height, SCREEN.base);
