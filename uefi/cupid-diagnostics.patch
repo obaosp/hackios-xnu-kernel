@@ -1,0 +1,80 @@
+diff --git a/Silicon/Silicium/SiliciumPkg/Sec/Sec.c b/Silicon/Silicium/SiliciumPkg/Sec/Sec.c
+--- a/Silicon/Silicium/SiliciumPkg/Sec/Sec.c
++++ b/Silicon/Silicium/SiliciumPkg/Sec/Sec.c
+@@ -17,6 +17,7 @@
+ #include <Library/HobLib.h>
+ 
+ #include "Sec.h"
++#include "CupidDiagnostics.h"
+ 
+ #ifndef MDEPKG_NDEBUG
+ STATIC
+@@ -94,8 +95,11 @@
+ {
+   EFI_STATUS Status;
+ 
++  CupidEarlyStage (2);
++
+   // Do Platform Specific Initialization
+   PlatformInitialize ();
++  CupidEarlyStage (3);
+ 
+ #ifndef MDEPKG_NDEBUG
+   // Initialize Serial Port
+@@ -118,6 +122,8 @@
+     return;
+   }
+ 
++  CupidEarlyStage (4);
++
+   // Build CPU HOB
+   BuildCpuHob (ArmGetPhysicalAddressBits (), PcdGet8 (PcdPrePiCpuIoSize));
+ 
+@@ -130,6 +136,8 @@
+     return;
+   }
+ 
++  CupidEarlyStage (5);
++
+   // Run Library Cconstructors
+   ProcessLibraryConstructorList ();
+ 
+@@ -140,7 +148,10 @@
+     return;
+   }
+ 
++  CupidEarlyStage (6);
++
+   // Load DXE Core
++  CupidEarlyStage (7);
+   Status = LoadDxeCoreFromFv (NULL, 0);
+   if (EFI_ERROR (Status)) {
+     DEBUG ((EFI_D_ERROR, "Failed to Load DXE Core! Status = %r\n", Status));
+@@ -150,6 +161,8 @@
+ VOID
+ SecEntry (VOID)
+ {
++  CupidEarlyStage (1);
++
+   // Disable Data Cache
+   ArmDisableDataCache ();
+ 
+diff --git a/Silicon/Silicium/SiliciumPkg/Sec/AArch64/ArchSec.c b/Silicon/Silicium/SiliciumPkg/Sec/AArch64/ArchSec.c
+--- a/Silicon/Silicium/SiliciumPkg/Sec/AArch64/ArchSec.c
++++ b/Silicon/Silicium/SiliciumPkg/Sec/AArch64/ArchSec.c
+@@ -7,12 +7,15 @@
+ #include <Library/SerialPortLib.h>
+ 
+ #include "Sec.h"
++#include "../CupidDiagnostics.h"
+ 
+ VOID
+ SecCommonExceptionEntry (
+   IN UINT32 Type,
+   IN UINTN  LR)
+ {
++  CupidEarlyStage (0);
++
+   CHAR8 Buffer[100];
+   UINTN CharCount;
+ 

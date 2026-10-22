@@ -97,3 +97,33 @@ firmware compatibility mismatch; hardware tests must establish the hang's cause.
 The frozen v001 image can be checked using `--fd-base 0xa7000000 --fd-size 0x400000`.
 
 See tools/build-cupid-probe.py for independent handoff diagnostics before UEFI.
+
+## Early SEC diagnostics
+
+Cupid enables CUPID_EARLY_DIAGNOSTICS in its platform build only. The preparation
+script installs cupid-diagnostics.patch and Sec/CupidDiagnostics.h. Other device
+builds compile the checkpoint calls as no-ops.
+
+| Stage | Color (BGRX) | Reached point |
+| --- | --- | --- |
+| 0 | Red | SEC exception handler; eight-second delayed reset |
+| 1 | Yellow | SecEntry, after assembly entry/stack setup |
+| 2 | Cyan | Before PlatformInitialize (core wake and SMMU detach) |
+| 3 | Green | After PlatformInitialize |
+| 4 | Blue | After memory initialization |
+| 5 | Magenta | After platform HOB recovery |
+| 6 | White | After FV decompression |
+| 7 | Orange | Before calling DXE core |
+
+Each stage holds its color for one second. A sec-stop XNUP entry containing a
+binary little-endian u32 stage selects a stop; that stage then waits eight
+seconds and requests PSCI SYSTEM_RESET. The checkpoint code writes only the
+splash framebuffer and reads the reserved payload; it uses no storage or USB.
+The ordinary loader diagnostic omits sec-stop and continues through all stages.
+The exception handler always shows red and requests reset in diagnostic builds.
+These colors require continued scanout, which vendor initialization can change.
+
+A frozen v003 baseline validated by tools/check-cupid-boot.py can produce the
+stopping variants with tools/pack-cupid-sec-stops.py --artifact ARTIFACT_DIR.
+Always test stage1 before advancing. Full source/userland compilation and APFS
+validation do not establish a working XNU or iOS boot.

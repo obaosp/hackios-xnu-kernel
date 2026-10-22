@@ -54,6 +54,16 @@ def prepare(args):
         shutil.copy2(HERE/'files'/shared/name, mu/shared/name)
     shutil.copy2(HERE/'files/Resources/Configs/cupid.toml', mu/'Resources/Configs/cupid.toml')
     shutil.copy2(fdt, mu/'Resources/DTBs/cupid.dtb')
+    diagnostics = HERE/'cupid-diagnostics.patch'
+    check = subprocess.run(['git', '-C', str(mu), 'apply', '--check', str(diagnostics)], capture_output=True)
+    if check.returncode == 0:
+        subprocess.run(['git', '-C', str(mu), 'apply', str(diagnostics)], check=True)
+    else:
+        reverse = subprocess.run(['git', '-C', str(mu), 'apply', '--reverse', '--check', str(diagnostics)], capture_output=True)
+        if reverse.returncode:
+            raise ValueError('Cupid diagnostics patch is neither applicable nor already applied')
+    sec = 'Silicon/Silicium/SiliciumPkg/Sec'
+    shutil.copy2(HERE/'files'/sec/'CupidDiagnostics.h', mu/sec/'CupidDiagnostics.h')
     # Reports stay local alongside the vendor inputs, outside this source repository.
     report = {'mu_commit': commit, 'firmware_build': BUILD_ID,
               'driver_policy': 'unmodified stock Cupid drivers; hardware compatibility pending',
