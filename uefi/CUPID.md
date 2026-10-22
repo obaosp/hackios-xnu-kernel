@@ -114,6 +114,11 @@ builds compile the checkpoint calls as no-ops.
 | 5 | Magenta | After platform HOB recovery |
 | 6 | White | After FV decompression |
 | 7 | Orange | Before calling DXE core |
+| 8 | Gray | DXE C entry, before installing exception handlers |
+| 9 | Lime | After exception/debug setup, before DXE memory services |
+| 10 | Violet | After DXE memory services |
+| 11 | Teal | After handle/image/GCD/system tables and library constructors |
+| 12 | Gold | Before DXE driver dispatch |
 
 Each stage holds its color for one second. A sec-stop XNUP entry containing a
 binary little-endian u32 stage selects a stop; that stage then waits eight
@@ -123,7 +128,37 @@ The ordinary loader diagnostic omits sec-stop and continues through all stages.
 The exception handler always shows red and requests reset in diagnostic builds.
 These colors require continued scanout, which vendor initialization can change.
 
-A frozen v003 baseline validated by tools/check-cupid-boot.py can produce the
-stopping variants with tools/pack-cupid-sec-stops.py --artifact ARTIFACT_DIR.
+A frozen baseline validated by tools/check-cupid-boot.py can produce the
+stopping variants with tools/pack-cupid-sec-stops.py --artifact ARTIFACT_DIR
+--baseline cupid-loader-v004.img --stages 8 9 10 11 12. Stage 8 and later
+require the DXE diagnostics patch; v003 supports stages 1 through 7 only.
 Always test stage1 before advancing. Full source/userland compilation and APFS
 validation do not establish a working XNU or iOS boot.
+
+## Cupid stock FV-list ABI
+
+The supplied stock SEC's CreateFvList function at 0xa7024e60 allocates 0x210
+bytes: an eight-byte count/padding prefix, eight 0x40-byte entries, and eight
+occupied flags at offset 0x208. It writes recursive lock handles at offsets
+0x18 + index * 0x40. FvUtilsDxe independently confirms the name stride and
+returns entry pointers at offset 8 + index * 0x40; consumers read the lock at
+entry + 0x10. The stock lock constructor is InitRecursiveLock at 0xa702a528.
+
+Mu's original UINTN-pointer macro scaled the lock offsets by eight and wrote
+seven handles outside its 592-byte allocation. Its entry stride also differs
+from Cupid's stock firmware. cupid-fvlist.patch selects the verified stock
+layout and recursive locks under CUPID_STOCK_FVLIST, enabled only by Cupid's
+platform. The following checks all bytes and simulates the stock lookup and
+lock consumer, with host bounds and undefined-behavior sanitizers:
+
+```sh
+cc -fsanitize=address,undefined -g \
+  -I Mu-Silicium/Silicon/Qualcomm/QcomPkg/Library/PlatformPeiLib \
+  tools/cupid-fvlist-check.c -o /tmp/cupid-fvlist-check
+/tmp/cupid-fvlist-check
+```
+
+All seven v003 SEC checkpoints passed user hardware testing, including FV
+decompression and the point before LoadDxeCoreFromFv. This does not prove DXE
+executed or that the FV-list correction fixes the later failure. v004 adds
+the corrected ABI and DXE checkpoints so the next failure can be localized.

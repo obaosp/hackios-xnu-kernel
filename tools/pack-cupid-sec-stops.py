@@ -17,11 +17,12 @@ def sha(path):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--artifact', type=Path, required=True)
+    p.add_argument('--baseline', default='cupid-loader-v003.img')
     p.add_argument('--stages', type=int, nargs='+', default=[1, 2, 3, 4, 5, 6, 7])
     a = p.parse_args()
     root = a.artifact.resolve()
     baseline = json.loads((root/'validation.json').read_text())
-    for name, file in [('image', 'cupid-loader-v003.img'), ('shim','BootShim.bin'),
+    for name, file in [('image', a.baseline), ('shim','BootShim.bin'),
                        ('fd','SILICIUM_UEFI.fd'), ('payload','usb-payload.bin'),
                        ('loader','loader.efi'), ('fdt','cupid.dtb')]:
         assert sha(root/file) == baseline['sha256'][name], name
@@ -30,7 +31,7 @@ def main():
     assert original[-24:] == bytes(24)
     checks = {}
     for stage in a.stages:
-        assert 1 <= stage <= 7
+        assert 1 <= stage <= 12
         extra = struct.pack('<16sII', b'sec-stop', 4, 0)+struct.pack('<I', stage)+bytes(12)
         body = original[8:-24]+extra+bytes(24)
         payload = b'XNUP'+struct.pack('<I',len(body))+body

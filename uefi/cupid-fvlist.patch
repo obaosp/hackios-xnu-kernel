@@ -1,0 +1,51 @@
+diff --git a/Silicon/Qualcomm/QcomPkg/Library/PlatformPeiLib/Include/FvList.h b/Silicon/Qualcomm/QcomPkg/Library/PlatformPeiLib/Include/FvList.h
+--- a/Silicon/Qualcomm/QcomPkg/Library/PlatformPeiLib/Include/FvList.h
++++ b/Silicon/Qualcomm/QcomPkg/Library/PlatformPeiLib/Include/FvList.h
+@@ -5,11 +5,22 @@
+ // FV List Limits
+ //
+ #define MAX_FV_ENTRIES                              8
++#ifdef CUPID_STOCK_FVLIST
++// BOOT.MXF.2.0-01018.3-WAIPIO-1 SEC CreateFvList (0xa7024e60):
++// 0x210 bytes: count/padding (8), eight 0x40-byte entries, occupied flags (8).
++// FvUtilsDxe returns List + 8 + Index * 0x40 and uses entry + 0x10 for the lock.
++#define FV_LIST_STRUCTURE_SIZE                     0x40
++#define FV_LIST_ALLOCATION_SIZE                    (8 + FV_LIST_STRUCTURE_SIZE * MAX_FV_ENTRIES + MAX_FV_ENTRIES)
++#define FV_LIST_LOCK_HANDLE(ListAddr, Index)        (*(UINT64 *)((UINT8 *)(ListAddr) + 0x18 + ((Index) * FV_LIST_STRUCTURE_SIZE)))
++#else
+ #define FV_LIST_STRUCTURE_SIZE                      0x4A
++#define FV_LIST_ALLOCATION_SIZE                    (FV_LIST_STRUCTURE_SIZE * MAX_FV_ENTRIES)
+ 
+ //
+ // FV List Structure
+ //
+ #define FV_LIST_LOCK_HANDLE(ListAddr, Index)       (*(UINT64 *)((ListAddr) + 0x18 + ((Index) * 0x48)))
+ 
++#endif // CUPID_STOCK_FVLIST
++
+ #endif /* _FV_LIST_H_ */
+diff --git a/Silicon/Qualcomm/QcomPkg/Library/PlatformPeiLib/PlatformPei.c b/Silicon/Qualcomm/QcomPkg/Library/PlatformPeiLib/PlatformPei.c
+--- a/Silicon/Qualcomm/QcomPkg/Library/PlatformPeiLib/PlatformPei.c
++++ b/Silicon/Qualcomm/QcomPkg/Library/PlatformPeiLib/PlatformPei.c
+@@ -36,7 +36,7 @@
+   UINTN      *FvListAddr;
+ 
+   // Allocate Memory
+-  FvListAddr = AllocateZeroPool (FV_LIST_STRUCTURE_SIZE * MAX_FV_ENTRIES);
++  FvListAddr = AllocateZeroPool (FV_LIST_ALLOCATION_SIZE);
+   if (FvListAddr == NULL) {
+     DEBUG ((EFI_D_ERROR, "%a: Failed to Allocate Memory for FV List!\n", __FUNCTION__));
+     goto exit;
+@@ -51,7 +51,12 @@
+     AsciiSPrint (FvEntryName, ARRAY_SIZE (FvEntryName), "FVLCK%u", i);
+ 
+     // Init FV Entry Lock
++#ifdef CUPID_STOCK_FVLIST
++    // Stock SEC calls InitRecursiveLock (0xa702a528), not InitLock.
++    Status = SchedulerProtocol->Lock->InitRecursiveLock (FvEntryName, &FvEntryHandle);
++#else
+     Status = SchedulerProtocol->Lock->InitLock (FvEntryName, &FvEntryHandle);
++#endif
+     if (EFI_ERROR (Status)) {
+       DEBUG ((EFI_D_ERROR, "%a: Failed to Init FV Entry %u Lock! Status = %r\n", __FUNCTION__, i, Status));
+       goto exit;

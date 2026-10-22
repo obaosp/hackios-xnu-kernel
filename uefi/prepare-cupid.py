@@ -66,6 +66,13 @@ def prepare(args):
             raise ValueError('Cupid diagnostics patch is neither applicable nor already applied')
     sec = 'Silicon/Silicium/SiliciumPkg/Sec'
     shutil.copy2(HERE/'files'/sec/'CupidDiagnostics.h', mu/sec/'CupidDiagnostics.h')
+    fvlist_patch = (HERE/'cupid-fvlist.patch').read_bytes()
+    apply_once(mu, fvlist_patch, 'Cupid FV-list')
+    basecore = mu/'Mu_Basecore'
+    dxe_patch = (HERE/'cupid-dxe-diagnostics.patch').read_text().replace('\n', '\r\n').encode()
+    apply_once(basecore, dxe_patch, 'Cupid DXE diagnostics')
+    shutil.copy2(HERE/'files'/sec/'CupidDiagnostics.h',
+                 basecore/'MdeModulePkg/Core/Dxe/DxeMain/CupidDiagnostics.h')
     # Reports stay local alongside the vendor inputs, outside this source repository.
     report = {'mu_commit': commit, 'firmware_build': BUILD_ID,
               'driver_policy': 'unmodified stock Cupid drivers; hardware compatibility pending',
@@ -74,6 +81,18 @@ def prepare(args):
                                   for p in sorted(firmware.rglob('*')) if p.is_file()}}
     (mu/'cupid-inputs.json').write_text(json.dumps(report, indent=2)+'\n')
     print('Prepared Cupid sources, local vendor drivers and runtime FDT in '+str(mu))
+
+
+def apply_once(tree, patch, label):
+    check = subprocess.run(['git', '-C', str(tree), 'apply', '--check', '-'],
+                           input=patch, capture_output=True)
+    if check.returncode == 0:
+        subprocess.run(['git', '-C', str(tree), 'apply', '-'], input=patch, check=True)
+        return
+    reverse = subprocess.run(['git', '-C', str(tree), 'apply', '--reverse', '--check', '-'],
+                             input=patch, capture_output=True)
+    if reverse.returncode:
+        raise ValueError(label+' patch is neither applicable nor already applied')
 
 
 def main():
